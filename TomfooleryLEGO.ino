@@ -25,6 +25,8 @@ bool state = true; // current mode; true = manual, false = ESP
 volatile unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 500;
 
+// GROUP NAME: Tomfoolery
+
 void setup() {
     pinMode(A8, INPUT);
     pinMode(A9, INPUT);
