@@ -1,7 +1,7 @@
 /*
 
 ESP Steering wheel example 14.11.2019 KN
-  
+
 */
 
 // Import required libraries
@@ -32,10 +32,10 @@ String processor(const String& var)
 {
   return String(digitalRead(LED_BUILTIN));
 }
-  
 
 
- 
+
+
 void setup(){
   // Serial port for debugging purposes
   Serial.begin(9600);
@@ -64,8 +64,8 @@ Serial.println("-------------");
   // Print ESP32 Local IP Address
   Serial.println(WiFi.localIP());
 
-  
-  
+
+
 
   // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -79,24 +79,25 @@ int paramsNr = request->params();
  //   Serial.println(" ------ ");
  //   Serial.print("Param qty: ");
  //   Serial.println(paramsNr);
-      
+
 for (byte i=0;i<paramsNr;i++)
  {
 
      AsyncWebParameter* p = request->getParam(0);
- 
+
    //  Serial.print("Param name: ");
    //  Serial.println(p->name());
 
    if ((p->name())=="dist"){ Serial.print("Move:");Serial.println(p->value()); };
    if ((p->name())=="dire"){ Serial.print("Turn:");Serial.println(p->value()); };
-      
+   if ((p->name())=="turnto"){ Serial.print("Degree:");Serial.println(p->value()); };
+
    //  Serial.print("Param value: ");
    //  Serial.println(p->value());
  }
   ;
 
-      
+
   });
 
 
@@ -105,7 +106,7 @@ for (byte i=0;i<paramsNr;i++)
     request->send(SPIFFS, "/jquery-1.11.3.min.js", "text/javascript");
 
       Serial.println(" JS jquery GET ");
-      
+
   });
 
     // Route to load style.css file
@@ -113,34 +114,34 @@ for (byte i=0;i<paramsNr;i++)
     request->send(SPIFFS, "/roundslider.min.js", "text/javascript");
 
     Serial.println(" min JS GET ");
-      
+
   });
 
-  
+
   // Route to load style.css file
   server.on("/roundslider.min.css", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(SPIFFS, "/roundslider.min.css", "text/css");
-    
+
     Serial.println(" min css GET ");
-    
+
   });
 
   // Route to set GPIO to HIGH
   server.on("/G---", HTTP_GET, [](AsyncWebServerRequest *request){
-    
+
     request->send(SPIFFS, "/index.html", String(), false, processor);
-    
+
       Serial.println(" ---- X ----- ");
-  
+
   });
 
- 
+
 
 
   // Start server
   server.begin();
 }
- 
+
 void loop(){
-  
+
 }

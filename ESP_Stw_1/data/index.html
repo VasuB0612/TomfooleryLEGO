@@ -61,7 +61,8 @@
 
 	var dire=0;		// direction
 	var dist=0;		// distance
-	var mode=0;		// mode 1 = direction value 2=distance vale
+	var turnto=0;	// turnto
+	var mode=0;		// mode 1 = direction value 2=distance value 3=turnto value
 
 	var valx = document.getElementById("rd_slider_1").value;
 
@@ -105,10 +106,10 @@
 
 
 	function turnTo() {
-		dire = document.getElementById("angle").value;
-		mode=1;
-		if (dire <= 360 && dire >= 0) {
-			document.getElementById("box1").value = `Turn to ${dire}`;
+		turnto = document.getElementById("angle").value;
+		mode=3;
+		if (turnto <= 360 && turnto >= 0) {
+			document.getElementById("box1").value = `Turn to ${turnto} deg`;
 			httpGetAsync(tryme);
 		} else {
 			alert("Please enter a value between 0 and 360");
@@ -181,6 +182,7 @@
 		}
 		if (mode==1) { 	xmlHttp.open("GET",'/?dire='+dire, true); };// true for asynchronous
 		if (mode==2) {  xmlHttp.open("GET",'/?dist='+dist, true); };// true for asynchronous
+		if (mode==3) {  xmlHttp.open("GET",'/?turnto='+turnto, true); };// true for asynchronous
 		xmlHttp.send(null);
 	}
 
