@@ -1,8 +1,11 @@
 #include <LiquidCrystal.h>
+#include <LIDARLite.h>
 #include <Wire.h>
 
 const int rs = 37, en = 36, d4 = 35, d5 = 34, d6 = 33, d7 = 32;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+LIDARLite lidar;
 
 #define Motor_return 0
 #define Motor_forward 1
@@ -21,6 +24,7 @@ byte raw; // current angle of compass in bytes
 int rawInit; // initial angle of compass in bytes
 int angleValue; // current angle of compass
 bool state = true; // current mode; true = manual, false = ESP
+int lidarDist;
 
 volatile unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 500;
@@ -28,7 +32,7 @@ const unsigned long debounceDelay = 500;
 // GROUP NAME: Tomfoolery
 
 void setup() {
-    pinMode(A8, INPUT);
+  pinMode(A8, INPUT);
     pinMode(A9, INPUT);
 
     Wire.begin();
@@ -37,12 +41,14 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(3), counterLeft, RISING); // counts pulses of the left wheel
     attachInterrupt(digitalPinToInterrupt(2), counterRight, RISING); // counts pulses of the right wheel
     attachInterrupt(digitalPinToInterrupt(19), setState, RISING); // changes mode between manual and ESP; false = manual, true = ESP
+
+    lidar.begin(0, true);
+    lidar.configure(0);
+
 }
 
 void loop() {
-    // Manual Mode
-    if (state) {
-        // read current angle of compass
+// read current angle of compass
         Wire.beginTransmission(CMPS14_address);
         Wire.write(1);
         Wire.endTransmission(false);
@@ -54,63 +60,11 @@ void loop() {
         int x = int(round(-(analogRead(A9) - 512) / 5.12)); // x axis of joystick
         int y = int(round((analogRead(A8) - 512) / 5.12)); // y axis of joystick
         float angle = float(raw) / 255 * 360; // angle of compass
+        int lidarDist = lidar.distance(true);
 
-        displayManual(angle);
+        displayManual(angle, lidarDist);
         driveManual(x, y);
-    }
-    // ESP Mode
-    else if (!state) {
-        displayESP();
-        if (Serial.available() > 0) {
-            String message = Serial.readStringUntil('\n');
-            Serial.print("Message received, content: ");
-            Serial.println(message);
-            int drive = message.indexOf("Move");
-            int turn = message.indexOf("Turn");
-            int degree = message.indexOf("Degree");
-
-            // if message contains "Move", execute driveESP()
-            if (drive > -1) {
-                Serial.println("Command = Move");
-                drive = message.indexOf(":");
-
-                if (drive > -1) {
-                    String stat = message.substring(drive + 1);
-                    Serial.println(stat);
-                    int value = stat.toInt();
-
-                    driveESP(value);
-                }
-            }
-            // if message contains "Turn", execute turnESP()
-            else if (turn > -1) {
-                Serial.println("Command = Turn");
-                turn = message.indexOf(":");
-
-                if (turn > -1) {
-                    String stat = message.substring(turn + 1);
-                    Serial.println(stat);
-                    int value = stat.toInt();
-
-                    turnESP(value);
-                }
-            }
-            // if message contains "Degree", execute turnToESP()
-            else if (degree > -1) {
-                Serial.println("Command = Degree");
-                degree = message.indexOf(":");
-                if (degree > -1) {
-                    String stat = message.substring(degree + 1);
-                    Serial.println(stat);
-                    int value = stat.toInt();
-
-                    turnToESP(value);
-                }
-            } else {
-                Serial.println("No command found\n");
-            }
-        }
-    }
+        delay(33);
 }
 
 // responsible for driving the car manually
@@ -159,295 +113,19 @@ void driveManual(int x, int y) {
     }
 }
 
-// responsible for driving the car in ESP mode
-// distance = distance to drive in cm
-void driveESP(int distance) {
-    lcd.clear();
-    lcd.setCursor(6, 0);
-    lcd.print("ESP Mode");
-    lcd.setCursor(2, 2);
-    lcd.print("Driving the car");
-    lcd.setCursor(2, 3);
-
-    // if distance is above 0, drive forward
-    if (distance > 0) {
-        lcd.print(distance);
-        lcd.print(" cm");
-        lcd.print(" forward..");
-
-        int countFinal = countR + distance * 8; // 8 pulses = 1 cm
-
-        // DO NOT REMOVE THESE PRINT STATEMENTS, OTHERWISE THE CODE WILL NOT WORK, I DONT FUCKING KNOW WHY
-        Serial.println(countR);
-        Serial.println(countFinal);
-
-        while (countR < countFinal) {
-            pwm_L = 1000;
-            pwm_R = 1000;
-            digitalWrite(Motor_R_dir_pin, Motor_forward);
-            digitalWrite(Motor_L_dir_pin, Motor_forward);
-            analogWrite(Motor_L_pwm_pin, pwm_L);
-            analogWrite(Motor_R_pwm_pin, pwm_R);
-        }
-    }
-
-    // if distance is below 0, drive backward
-    else if (distance < 0) {
-        lcd.print(-distance);
-        lcd.print(" cm");
-        lcd.print(" backward..");
-
-        int countFinal = countR - distance * 8; // 8 pulses = 1 cm
-
-        // DO NOT REMOVE THESE PRINT STATEMENTS, OTHERWISE THE CODE WILL NOT WORK, I DONT FUCKING KNOW WHY
-        Serial.println(countR);
-        Serial.println(countFinal);
-
-        while (countR < countFinal) {
-            pwm_L = 1000;
-            pwm_R = 1000;
-            digitalWrite(Motor_R_dir_pin, Motor_return);
-            digitalWrite(Motor_L_dir_pin, Motor_return);
-            analogWrite(Motor_L_pwm_pin, pwm_L);
-            analogWrite(Motor_R_pwm_pin, pwm_R);
-        }
-    }
-    else {
-        Serial.println("0..?");
-    }
-    pwm_L = 0;
-    pwm_R = 0;
-    analogWrite(Motor_L_pwm_pin, pwm_L);
-    analogWrite(Motor_R_pwm_pin, pwm_R);
-}
-
-// responsible for turning the car in ESP mode
-// value = degrees to turn
-void turnESP(int value) {
-    lcd.clear();
-    lcd.setCursor(6, 0);
-    lcd.print("ESP Mode");
-    lcd.setCursor(2, 2);
-    lcd.print("Turning the car");
-    lcd.setCursor(2, 3);
-
-    // if value is above 0, turn right
-    if (value > 0) {
-        lcd.print(value);
-        lcd.print(" degrees right");
-        int angleFinal = value;
-
-        // read current angle of compass
-        Wire.beginTransmission(CMPS14_address);
-        Wire.write(1);
-        Wire.endTransmission(false);
-        Wire.requestFrom(CMPS14_address, 1, true);
-        if (Wire.available()) {
-            raw = Wire.read();
-            rawInit = raw;
-            angleValue = byteToAngle(raw - rawInit);
-        }
-
-        // angleValue defaults to 0, and turn right until angleValue >= angleFinal
-        while (angleValue < angleFinal) {
-            // read current angle of compass
-            Wire.beginTransmission(CMPS14_address);
-            Wire.write(1);
-            Wire.endTransmission(false);
-            Wire.requestFrom(CMPS14_address, 1, true);
-            if (Wire.available()) {
-                raw = Wire.read();
-                angleValue = byteToAngle(raw - rawInit);
-            }
-
-            pwm_L = 0;
-            pwm_R = 1000;
-            digitalWrite(Motor_R_dir_pin, Motor_forward);
-            digitalWrite(Motor_L_dir_pin, Motor_forward);
-            analogWrite(Motor_L_pwm_pin, pwm_L);
-            analogWrite(Motor_R_pwm_pin, pwm_R);
-        }
-    }
-    // if value is below 0, turn left
-    else if (value < 0) {
-        lcd.print(-value);
-        lcd.print(" degrees left");
-
-        int angleFinal = 360 + value;
-
-        // read current angle of compass
-        Wire.beginTransmission(CMPS14_address);
-        Wire.write(1);
-        Wire.endTransmission(false);
-        Wire.requestFrom(CMPS14_address, 1, true);
-        if (Wire.available()) {
-            raw = Wire.read();
-            rawInit = raw;
-            angleValue = byteToAngle(raw + 255 - rawInit);
-        }
-
-        // angleValue defaults to 360, and turn left until angleValue <= angleFinal
-        while (angleValue > angleFinal) {
-            // read current angle of compass
-            Wire.beginTransmission(CMPS14_address);
-            Wire.write(1);
-            Wire.endTransmission(false);
-            Wire.requestFrom(CMPS14_address, 1, true);
-            if (Wire.available()) {
-                raw = Wire.read();
-                angleValue = byteToAngle(raw + 255 - rawInit);
-            }
-
-            pwm_L = 1000;
-            pwm_R = 0;
-            digitalWrite(Motor_R_dir_pin, Motor_forward);
-            digitalWrite(Motor_L_dir_pin, Motor_forward);
-            analogWrite(Motor_L_pwm_pin, pwm_L);
-            analogWrite(Motor_R_pwm_pin, pwm_R);
-        }
-    }
-    else {
-        Serial.println("0..?");
-    }
-    pwm_L = 0;
-    pwm_R = 0;
-    analogWrite(Motor_L_pwm_pin, pwm_L);
-    analogWrite(Motor_R_pwm_pin, pwm_R);
-}
-
-// responsible for turning the car to a specific angle in ESP mode
-// value = degrees to turn to
-void turnToESP(int value) {
-    lcd.clear();
-    lcd.setCursor(6, 0);
-    lcd.print("ESP Mode");
-    lcd.setCursor(2, 2);
-    lcd.print("Turning the car");
-    lcd.setCursor(2, 3);
-    lcd.print("to ");
-    lcd.print(value);
-    lcd.print(" degrees");
-
-    // read current angle of compass
-    Wire.beginTransmission(CMPS14_address);
-    Wire.write(1);
-    Wire.endTransmission(false);
-    Wire.requestFrom(CMPS14_address, 1, true);
-    if (Wire.available()) {
-        raw = Wire.read();
-        rawInit = raw;
-        angleValue = byteToAngle(raw);
-    }
-
-    // calculates which direction is the shortest to turn to
-    // angleFinal = angle to turn to
-    int angleFinal = angleValue - value;
-
-    if (angleFinal <= -180) {
-        angleFinal = -angleFinal;
-    }
-    else if (angleFinal > -180 && angleFinal < 180) {
-        angleFinal = angleFinal;
-    }
-    else if (angleFinal >= 180) {
-        angleFinal = angleFinal - 360;
-    }
-
-    // if angleFinal is below 0, turn right
-    if (angleFinal < 0) {
-        angleFinal = -angleFinal;
-
-        // read current angle of compass
-        Wire.beginTransmission(CMPS14_address);
-        Wire.write(1);
-        Wire.endTransmission(false);
-        Wire.requestFrom(CMPS14_address, 1, true);
-        if (Wire.available()) {
-            raw = Wire.read();
-            rawInit = raw;
-            angleValue = byteToAngle(raw - rawInit);
-        }
-
-        // angleValue defaults to 0, and turn right until angleValue >= angleFinal
-        while (angleValue < angleFinal) {
-            Wire.beginTransmission(CMPS14_address);
-            Wire.write(1);
-            Wire.endTransmission(false);
-            Wire.requestFrom(CMPS14_address, 1, true);
-            if (Wire.available()) {
-                raw = Wire.read();
-                angleValue = byteToAngle(raw - rawInit);
-            }
-
-            pwm_L = 0;
-            pwm_R = 1000;
-            digitalWrite(Motor_R_dir_pin, Motor_forward);
-            digitalWrite(Motor_L_dir_pin, Motor_forward);
-            analogWrite(Motor_L_pwm_pin, pwm_L);
-            analogWrite(Motor_R_pwm_pin, pwm_R);
-        }
-    }
-    // if angleFinal is above 0, turn left
-    else if (angleFinal > 0) {
-        // read current angle of compass
-        Wire.beginTransmission(CMPS14_address);
-        Wire.write(1);
-        Wire.endTransmission(false);
-        Wire.requestFrom(CMPS14_address, 1, true);
-        if (Wire.available()) {
-            raw = Wire.read();
-            rawInit = raw;
-            angleValue = byteToAngle(raw + 255 - rawInit);
-        }
-
-        angleFinal = 360 - angleFinal;
-
-        // angleValue defaults to 360, and turn left until angleValue <= angleFinal
-        while (angleValue > angleFinal) {
-            Wire.beginTransmission(CMPS14_address);
-            Wire.write(1);
-            Wire.endTransmission(false);
-            Wire.requestFrom(CMPS14_address, 1, true);
-            if (Wire.available()) {
-                raw = Wire.read();
-                angleValue = byteToAngle(raw + 255 - rawInit);
-            }
-
-            pwm_L = 1000;
-            pwm_R = 0;
-            digitalWrite(Motor_R_dir_pin, Motor_forward);
-            digitalWrite(Motor_L_dir_pin, Motor_forward);
-            analogWrite(Motor_L_pwm_pin, pwm_L);
-            analogWrite(Motor_R_pwm_pin, pwm_R);
-        }
-    }
-    else {
-        Serial.println("WHAAAAT?");
-    }
-    pwm_L = 0;
-    pwm_R = 0;
-    analogWrite(Motor_L_pwm_pin, pwm_L);
-    analogWrite(Motor_R_pwm_pin, pwm_R);
-}
-
-// converts byte to angle
-int byteToAngle(byte raw) {
-    return map(raw, 0, 255, 0, 360);
-}
-
 // displays the current state of the car in manual mode
-void displayManual(float angle) {
+void displayManual(float angle, int lidarDist) {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Total Count: ");
     lcd.print(countL + countR);
     lcd.setCursor(0, 1);
-    lcd.print("Dist Left: ");
-    lcd.print(countL/8);
+    lcd.print("Dist Avg: ");
+    lcd.print((countL + countR)/16);
     lcd.print(" cm");
     lcd.setCursor(0, 2);
-    lcd.print("Dist Right: ");
-    lcd.print(countR/8);
+    lcd.print("Lidar: ");
+    lcd.print(lidarDist);
     lcd.print(" cm");
     lcd.setCursor(0, 3);
     lcd.print("Angle: ");
@@ -455,25 +133,6 @@ void displayManual(float angle) {
     lcd.print(" (");
     lcd.print(cardinals(angle));
     lcd.print(")");
-    delay(50);
-}
-
-// displays the current state of the car in ESP mode
-void displayESP() {
-    lcd.clear();
-    lcd.setCursor(6, 0);
-    lcd.print("ESP Mode");
-    lcd.setCursor(0, 1);
-    lcd.print("Total Count: ");
-    lcd.print(countL + countR);
-    lcd.setCursor(0, 2);
-    lcd.print("Dist Left: ");
-    lcd.print(countL/8);
-    lcd.print(" cm");
-    lcd.setCursor(0, 3);
-    lcd.print("Dist Right: ");
-    lcd.print(countR/8);
-    lcd.print(" cm");
     delay(50);
 }
 
@@ -508,7 +167,6 @@ String cardinals(float angle) {
     }
 }
 
-// changes mode between manual and ESP
 void setState() {
     unsigned long currentTime = millis();
 
