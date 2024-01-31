@@ -136,6 +136,91 @@ void displayManual(float angle, int lidarDist) {
     delay(50);
 }
 
+void turnESP(int value) {
+    // if value is above 0, turn right
+    if (value > 0) {
+        lcd.print(value);
+        lcd.print(" degrees right");
+        int angleFinal = value;
+
+        // read current angle of compass
+        Wire.beginTransmission(CMPS14_address);
+        Wire.write(1);
+        Wire.endTransmission(false);
+        Wire.requestFrom(CMPS14_address, 1, true);
+        if (Wire.available()) {
+            raw = Wire.read();
+            rawInit = raw;
+            angleValue = byteToAngle(raw - rawInit);
+        }
+
+        // angleValue defaults to 0, and turn right until angleValue >= angleFinal
+        while (angleValue < angleFinal) {
+            // read current angle of compass
+            Wire.beginTransmission(CMPS14_address);
+            Wire.write(1);
+            Wire.endTransmission(false);
+            Wire.requestFrom(CMPS14_address, 1, true);
+            if (Wire.available()) {
+                raw = Wire.read();
+                angleValue = byteToAngle(raw - rawInit);
+            }
+
+            pwm_L = 0;
+            pwm_R = 1000;
+            digitalWrite(Motor_R_dir_pin, Motor_forward);
+            digitalWrite(Motor_L_dir_pin, Motor_forward);
+            analogWrite(Motor_L_pwm_pin, pwm_L);
+            analogWrite(Motor_R_pwm_pin, pwm_R);
+        }
+    }
+    // if value is below 0, turn left
+    else if (value < 0) {
+        lcd.print(-value);
+        lcd.print(" degrees left");
+
+        int angleFinal = 360 + value;
+
+        // read current angle of compass
+        Wire.beginTransmission(CMPS14_address);
+        Wire.write(1);
+        Wire.endTransmission(false);
+        Wire.requestFrom(CMPS14_address, 1, true);
+        if (Wire.available()) {
+            raw = Wire.read();
+            rawInit = raw;
+            angleValue = byteToAngle(raw + 255 - rawInit);
+        }
+
+        // angleValue defaults to 360, and turn left until angleValue <= angleFinal
+        while (angleValue > angleFinal) {
+            // read current angle of compass
+            Wire.beginTransmission(CMPS14_address);
+            Wire.write(1);
+            Wire.endTransmission(false);
+            Wire.requestFrom(CMPS14_address, 1, true);
+            if (Wire.available()) {
+                raw = Wire.read();
+                angleValue = byteToAngle(raw + 255 - rawInit);
+            }
+
+            pwm_L = 1000;
+            pwm_R = 0;
+            digitalWrite(Motor_R_dir_pin, Motor_forward);
+            digitalWrite(Motor_L_dir_pin, Motor_forward);
+            analogWrite(Motor_L_pwm_pin, pwm_L);
+            analogWrite(Motor_R_pwm_pin, pwm_R);
+        }
+    }
+    else {
+        Serial.println("0..?");
+    }
+    pwm_L = 0;
+    pwm_R = 0;
+    analogWrite(Motor_L_pwm_pin, pwm_L);
+    analogWrite(Motor_R_pwm_pin, pwm_R);
+}
+
 // converts angle to cardinal direction
 String cardinals(float angle) {
     if (angle <= 67.5 && angle > 22.5) {
