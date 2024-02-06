@@ -23,8 +23,14 @@ int countR = 0; // count of pulses of right wheel
 byte raw; // current angle of compass in bytes
 int rawInit; // initial angle of compass in bytes
 int angleValue; // current angle of compass
-bool state = true; // current mode; true = manual, false = ESP
+bool state = false; // current mode;
 int lidarDist;
+
+float a;
+float b;
+float c;
+float area = 0;
+float volume = 0;
 
 volatile unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 500;
@@ -47,6 +53,8 @@ void setup() {
 
 }
 
+int variable = 1;
+
 void loop() {
 // read current angle of compass
         Wire.beginTransmission(CMPS14_address);
@@ -60,11 +68,37 @@ void loop() {
         int x = int(round(-(analogRead(A9) - 512) / 5.12)); // x axis of joystick
         int y = int(round((analogRead(A8) - 512) / 5.12)); // y axis of joystick
         float angle = float(raw) / 255 * 360; // angle of compass
-        int lidarDist = lidar.distance(true);
+        lidarDist = lidar.distance(true);
 
         displayManual(angle, lidarDist);
         driveManual(x, y);
         delay(33);
+
+        if (state) {
+          if (variable == 1) {
+            a = lidar.distance();
+            turnESP();
+            variable = 2;
+          }
+          else if (variable == 2) {
+            b = lidar.distance();
+            turnESP();
+            variable = 3;
+          }
+          else if (variable == 3) {
+            lcd.print("Turn the car up cuh.")
+            c = lidar.distance();
+            turnESP();
+            variable = 1;
+          }
+          state = false;
+        }
+        if (a && b) {
+          area = a*b;
+        }
+        if (a && b && c) {
+          volume = a*b*c;
+        }
 }
 
 // responsible for driving the car manually
@@ -117,22 +151,20 @@ void driveManual(int x, int y) {
 void displayManual(float angle, int lidarDist) {
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("Total Count: ");
-    lcd.print(countL + countR);
-    lcd.setCursor(0, 1);
-    lcd.print("Dist Avg: ");
-    lcd.print((countL + countR)/16);
-    lcd.print(" cm");
+    lcd.print("A: ");
+    lcd.print(a);
+    lcd.setCursor(10, 0);
+    lcd.print("B: ");
+    lcd.print(b);
+    lcd.setCursor(0, 1);    
+    lcd.print("C: ");
+    lcd.print(c);
     lcd.setCursor(0, 2);
-    lcd.print("Lidar: ");
-    lcd.print(lidarDist);
-    lcd.print(" cm");
+    lcd.print("Area: ");
+    lcd.print(area);
     lcd.setCursor(0, 3);
-    lcd.print("Angle: ");
-    lcd.print(angle);
-    lcd.print(" (");
-    lcd.print(cardinals(angle));
-    lcd.print(")");
+    lcd.print("Volume: ");
+    lcd.print(volume);
     delay(50);
 }
 
@@ -254,19 +286,25 @@ String cardinals(float angle) {
 
 void setState() {
     unsigned long currentTime = millis();
-
     // ESP Mode
     if (currentTime - lastDebounceTime > debounceDelay && state) {
         state = false;
-        Serial.println("Entered ESP Mode.");
+
+        Serial.println("State: false");      
     }
     // Manual Mode
     else if (currentTime - lastDebounceTime > debounceDelay && !state) {
         state = true;
-        Serial.println("Entered Manual Control Mode.");
+        
+        Serial.println("State: true");
     }
 
     lastDebounceTime = currentTime;
+}
+
+// converts byte to angle
+int byteToAngle(byte raw) {
+    return map(raw, 0, 255, 0, 360);
 }
 
 void counterLeft() {
