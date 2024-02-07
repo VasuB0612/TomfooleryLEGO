@@ -26,8 +26,10 @@ int angleValue; // current angle of compass
 bool state = false; // current mode;
 int lidarDist;
 
-float a;
-float b;
+float a1;
+float a2;
+float b1;
+float b2;
 float c;
 float area = 0;
 float volume = 0;
@@ -70,35 +72,40 @@ void loop() {
         float angle = float(raw) / 255 * 360; // angle of compass
         lidarDist = lidar.distance(true);
 
-        displayManual(angle, lidarDist);
         driveManual(x, y);
         delay(33);
 
         if (state) {
-          if (variable == 1) {
-            a = lidar.distance();
-            turnESP();
-            variable = 2;
-          }
-          else if (variable == 2) {
-            b = lidar.distance();
-            turnESP();
-            variable = 3;
-          }
-          else if (variable == 3) {
-            lcd.print("Turn the car up cuh.")
-            c = lidar.distance();
-            turnESP();
-            variable = 1;
+          a1 = lidar.distance();
+          turnESP(90);
+          delay(333);
+          b1 = lidar.distance();
+          turnESP(90);
+          delay(333);
+          a2 = lidar.distance();
+          turnESP(90);
+          delay(333);
+          b2 = lidar.distance();
+          
+          state = false;
+          while(!state){
+            lcd.setCursor(0, 0);
+            lcd.print("Turn the car up cuh.");
+            delay(33);
+            if(state){
+              c = lidar.distance();
+            }
           }
           state = false;
+          
         }
-        if (a && b) {
-          area = a*b;
+        if (a1 && b1 && a2 && b2) {
+          area = (a1+a2)*(b1+b2);
         }
-        if (a && b && c) {
-          volume = a*b*c;
+        if (a1 && b1 && a2 && b2 && c) {
+          volume = (a1+a2)*(b1+b2)*c;
         }
+        displayManual();
 }
 
 // responsible for driving the car manually
@@ -148,17 +155,8 @@ void driveManual(int x, int y) {
 }
 
 // displays the current state of the car in manual mode
-void displayManual(float angle, int lidarDist) {
+void displayManual() {
     lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("A: ");
-    lcd.print(a);
-    lcd.setCursor(10, 0);
-    lcd.print("B: ");
-    lcd.print(b);
-    lcd.setCursor(0, 1);    
-    lcd.print("C: ");
-    lcd.print(c);
     lcd.setCursor(0, 2);
     lcd.print("Area: ");
     lcd.print(area);
@@ -171,8 +169,6 @@ void displayManual(float angle, int lidarDist) {
 void turnESP(int value) {
     // if value is above 0, turn right
     if (value > 0) {
-        lcd.print(value);
-        lcd.print(" degrees right");
         int angleFinal = value;
 
         // read current angle of compass
@@ -208,9 +204,6 @@ void turnESP(int value) {
     }
     // if value is below 0, turn left
     else if (value < 0) {
-        lcd.print(-value);
-        lcd.print(" degrees left");
-
         int angleFinal = 360 + value;
 
         // read current angle of compass
